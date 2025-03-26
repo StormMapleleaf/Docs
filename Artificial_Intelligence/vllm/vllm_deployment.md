@@ -28,6 +28,6 @@
 
 3. 参数解释
 
-   - --tensor-parallel-size 		#每个节点上的GPU数量
-   - --pipeline-parallel-size       #节点数量
+   - --tensor-parallel-size 		#每个节点上的GPU数量,张量并行
+   - --pipeline-parallel-size       #节点数量，流水推理
    - /model-path    #模型路径，如果模型在每个节点都有一份，写绝对路径；如果模型存放在共享文件，填写共享文件地址
