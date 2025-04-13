@@ -1,0 +1,315 @@
+部署后不能访问是因为没有完全安装ray
+http://127.0.0.1:8265/
+
+分发密钥到node2
+ssh-copy-id node2
+
+批量执行命令
+python3 remote_command_executor.py
+
+/home/kaixin/miniconda3/envs/vllm/bin/ray stop
+/home/kaixin/miniconda3/bin/activate vllm && /home/kaixin/miniconda3/bin/pip install ray[default]
+
+
+# 安装 Ray
+pip install ray[default]
+
+python -c "import ray, json; ray.init(address='auto'); print(json.dumps(ray.nodes(), indent=2))"
+
+ssh kaixin@node2
+
+
+conda activate vllm
+
+
+# 101 启动 Ray Head 节点，明确指定 IP
+export GLOO_SOCKET_IFNAME=ibp1s0
+export TP_SOCKET_IFNAME=ibp1s0
+export NCCL_SOCKET_IFNAME=ibp1s0
+export VLLM_HOST_IP=192.168.120.101
+
+ray start --head \
+  --node-ip-address=192.168.120.101 \
+  --port=6379 \
+  --dashboard-host='0.0.0.0'
+  
+# 102 worker节点
+conda activate vllm
+export GLOO_SOCKET_IFNAME=ibp1s0
+export TP_SOCKET_IFNAME=ibp1s0
+export NCCL_SOCKET_IFNAME=ibp1s0
+export VLLM_HOST_IP=192.168.120.102
+
+ray start --address='192.168.120.101:6379'
+
+# 103 worker节点
+conda activate vllm
+export GLOO_SOCKET_IFNAME=ibp1s0
+export TP_SOCKET_IFNAME=ibp1s0
+export NCCL_SOCKET_IFNAME=ibp1s0
+export VLLM_HOST_IP=192.168.120.103
+
+ray start --address='192.168.120.101:6379'
+
+
+/home/kaixin/miniconda3/bin/activate vllm && /home/kaixin/miniconda3/bin/pip install ray[default]
+
+# 9台0.9不行，10台0.9可以,10台0.8可以
+vllm serve /home/kaixin/llama-3-70B  --tensor-parallel-size 1 --pipeline-parallel-size 10 \
+--served_model_name llama-3-70B \
+--trust-remote-code --port 8009 \
+    --max-model-len 512 \
+    --gpu-memory-utilization 0.8
+
+10台0.9
+nvidia-smi
+101 22271MiB /  24564MiB
+114 21487MiB /  24564MiB
+
+10台0.8
+nvidia-smi
+101 20202MiB /  24564MiB
+103 17079MiB /  24564MiB
+108 17079MiB /  24564MiB
+
+Llama-3-70B单个参数需约140GB显存（70B*2Bytes）
+设置的gpu-memory-utilization
+0.9，也就是21.6GB可用，10台就是216G
+0.9*21*10=189
+0.8*17*10=136
+
+curl -X POST "http://localhost:8009/v1/completions" 	-H "Content-Type: application/json" 	--data '{
+  		"model": "llama-3-70B",
+  		"prompt": "who are you!",
+  		"max_tokens": 51,
+  		"temperature": 0.5
+  	}'
+
+
+
+(vllm) kaixin@node1:~/桌面$ vllm serve /home/kaixin/llama-3-70B  --tensor-parallel-size 1 --pipeline-parallel-size 9 \
+--served_model_name llama-3-70B \
+--trust-remote-code --port 8009 \
+    --max-model-len 2048 \
+    --gpu-memory-utilization 0.9
+INFO 03-27 16:13:47 __init__.py:207] Automatically detected platform cuda.
+INFO 03-27 16:13:47 api_server.py:912] vLLM API server version 0.7.3
+INFO 03-27 16:13:47 api_server.py:913] args: Namespace(subparser='serve', model_tag='/home/kaixin/llama-3-70B', config='', host=None, port=8009, uvicorn_log_level='info', allow_credentials=False, allowed_origins=['*'], allowed_methods=['*'], allowed_headers=['*'], api_key=None, lora_modules=None, prompt_adapters=None, chat_template=None, chat_template_content_format='auto', response_role='assistant', ssl_keyfile=None, ssl_certfile=None, ssl_ca_certs=None, ssl_cert_reqs=0, root_path=None, middleware=[], return_tokens_as_token_ids=False, disable_frontend_multiprocessing=False, enable_request_id_headers=False, enable_auto_tool_choice=False, enable_reasoning=False, reasoning_parser=None, tool_call_parser=None, tool_parser_plugin='', model='/home/kaixin/llama-3-70B', task='auto', tokenizer=None, skip_tokenizer_init=False, revision=None, code_revision=None, tokenizer_revision=None, tokenizer_mode='auto', trust_remote_code=True, allowed_local_media_path=None, download_dir=None, load_format='auto', config_format=<ConfigFormat.AUTO: 'auto'>, dtype='auto', kv_cache_dtype='auto', max_model_len=2048, guided_decoding_backend='xgrammar', logits_processor_pattern=None, model_impl='auto', distributed_executor_backend=None, pipeline_parallel_size=9, tensor_parallel_size=1, max_parallel_loading_workers=None, ray_workers_use_nsight=False, block_size=None, enable_prefix_caching=None, disable_sliding_window=False, use_v2_block_manager=True, num_lookahead_slots=0, seed=0, swap_space=4, cpu_offload_gb=0, gpu_memory_utilization=0.9, num_gpu_blocks_override=None, max_num_batched_tokens=None, max_num_partial_prefills=1, max_long_partial_prefills=1, long_prefill_token_threshold=0, max_num_seqs=None, max_logprobs=20, disable_log_stats=False, quantization=None, rope_scaling=None, rope_theta=None, hf_overrides=None, enforce_eager=False, max_seq_len_to_capture=8192, disable_custom_all_reduce=False, tokenizer_pool_size=0, tokenizer_pool_type='ray', tokenizer_pool_extra_config=None, limit_mm_per_prompt=None, mm_processor_kwargs=None, disable_mm_preprocessor_cache=False, enable_lora=False, enable_lora_bias=False, max_loras=1, max_lora_rank=16, lora_extra_vocab_size=256, lora_dtype='auto', long_lora_scaling_factors=None, max_cpu_loras=None, fully_sharded_loras=False, enable_prompt_adapter=False, max_prompt_adapters=1, max_prompt_adapter_token=0, device='auto', num_scheduler_steps=1, multi_step_stream_outputs=True, scheduler_delay_factor=0.0, enable_chunked_prefill=None, speculative_model=None, speculative_model_quantization=None, num_speculative_tokens=None, speculative_disable_mqa_scorer=False, speculative_draft_tensor_parallel_size=None, speculative_max_model_len=None, speculative_disable_by_batch_size=None, ngram_prompt_lookup_max=None, ngram_prompt_lookup_min=None, spec_decoding_acceptance_method='rejection_sampler', typical_acceptance_sampler_posterior_threshold=None, typical_acceptance_sampler_posterior_alpha=None, disable_logprobs_during_spec_decoding=None, model_loader_extra_config=None, ignore_patterns=[], preemption_mode=None, served_model_name=['llama-3-70B'], qlora_adapter_name_or_path=None, otlp_traces_endpoint=None, collect_detailed_traces=None, disable_async_output_proc=False, scheduling_policy='fcfs', scheduler_cls='vllm.core.scheduler.Scheduler', override_neuron_config=None, override_pooler_config=None, compilation_config=None, kv_transfer_config=None, worker_cls='auto', generation_config=None, override_generation_config=None, enable_sleep_mode=False, calculate_kv_scales=False, additional_config=None, disable_log_requests=False, max_log_len=None, disable_fastapi_docs=False, enable_prompt_tokens_details=False, dispatch_function=<function ServeSubcommand.cmd at 0x7106499e60c0>)
+INFO 03-27 16:13:50 config.py:549] This model supports multiple tasks: {'embed', 'reward', 'classify', 'generate', 'score'}. Defaulting to 'generate'.
+INFO 03-27 16:13:50 config.py:1382] Defaulting to use ray for distributed inference
+WARNING 03-27 16:13:50 config.py:676] Async output processing can not be enabled with pipeline parallel
+INFO 03-27 16:13:50 llm_engine.py:234] Initializing a V0 LLM engine (v0.7.3) with config: model='/home/kaixin/llama-3-70B', speculative_config=None, tokenizer='/home/kaixin/llama-3-70B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=2048, download_dir=None, load_format=LoadFormat.AUTO, tensor_parallel_size=1, pipeline_parallel_size=9, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto,  device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=llama-3-70B, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=False, use_async_output_proc=False, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":[],"compile_sizes":[],"cudagraph_capture_sizes":[256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"max_capture_size":256}, use_cached_outputs=False, 
+2025-03-27 16:13:50,877	INFO worker.py:1636 -- Connecting to existing Ray cluster at address: 192.168.120.101:6379...
+2025-03-27 16:13:50,884	INFO worker.py:1821 -- Connected to Ray cluster.
+INFO 03-27 16:13:50 ray_distributed_executor.py:153] use_ray_spmd_worker: False
+(RayWorkerWrapper pid=33609) INFO 03-27 16:13:54 __init__.py:207] Automatically detected platform cuda.
+INFO 03-27 16:13:56 cuda.py:229] Using Flash Attention backend.
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) INFO 03-27 16:13:56 cuda.py:229] Using Flash Attention backend.
+INFO 03-27 16:13:56 utils.py:916] Found nccl from library libnccl.so.2
+INFO 03-27 16:13:56 pynccl.py:69] vLLM is using nccl==2.21.5
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) INFO 03-27 16:13:56 utils.py:916] Found nccl from library libnccl.so.2
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) INFO 03-27 16:13:56 pynccl.py:69] vLLM is using nccl==2.21.5
+INFO 03-27 16:13:56 model_runner.py:1110] Starting to load model /home/kaixin/llama-3-70B...
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) INFO 03-27 16:13:56 model_runner.py:1110] Starting to load model /home/kaixin/llama-3-70B...
+Loading safetensors checkpoint shards:   0% Completed | 0/30 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  33% Completed | 10/30 [00:00<00:00, 99.50it/s]
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581] Error executing method 'load_model'. This might cause deadlock in distributed execution.
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581] Traceback (most recent call last):
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/worker/worker_base.py", line 573, in execute_method
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     return run_method(target, method, args, kwargs)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/utils.py", line 2196, in run_method
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     return func(*args, **kwargs)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]            ^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/worker/worker.py", line 183, in load_model
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     self.model_runner.load_model()
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/worker/model_runner.py", line 1112, in load_model
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     self.model = get_model(vllm_config=self.vllm_config)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/model_loader/__init__.py", line 14, in get_model
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     return loader.load_model(vllm_config=vllm_config)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/model_loader/loader.py", line 406, in load_model
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     model = _initialize_model(vllm_config=vllm_config)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/model_loader/loader.py", line 125, in _initialize_model
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     return model_class(vllm_config=vllm_config, prefix=prefix)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 496, in __init__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     self.model = self._init_model(vllm_config=vllm_config,
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 533, in _init_model
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     return LlamaModel(vllm_config=vllm_config, prefix=prefix)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/compilation/decorators.py", line 151, in __init__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     old_init(self, vllm_config=vllm_config, prefix=prefix, **kwargs)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 326, in __init__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     self.start_layer, self.end_layer, self.layers = make_layers(
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                                                     ^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/utils.py", line 558, in make_layers
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     maybe_offload_to_cpu(layer_fn(prefix=f"{prefix}.{idx}"))
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 328, in <lambda>
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     lambda prefix: layer_type(config=config,
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 254, in __init__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     self.mlp = LlamaMLP(
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                ^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 70, in __init__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     self.gate_up_proj = MergedColumnParallelLinear(
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/layers/linear.py", line 441, in __init__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     super().__init__(input_size=input_size,
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/layers/linear.py", line 314, in __init__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     self.quant_method.create_weights(
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/layers/linear.py", line 129, in create_weights
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     weight = Parameter(torch.empty(sum(output_partition_sizes),
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/torch/utils/_device.py", line 106, in __torch_function__
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]     return func(*args, **kwargs)
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581]            ^^^^^^^^^^^^^^^^^^^^^
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) ERROR 03-27 16:13:57 worker_base.py:581] torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 0 has a total capacity of 23.64 GiB of which 379.06 MiB is free. Including non-PyTorch memory, this process has 23.13 GiB memory in use. Of the allocated memory 22.60 GiB is allocated by PyTorch, and 19.53 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Loading safetensors checkpoint shards:  67% Completed | 20/30 [00:04<00:02,  4.07it/s]
+Loading safetensors checkpoint shards:  83% Completed | 25/30 [00:07<00:01,  2.89it/s]
+(RayWorkerWrapper pid=26136, ip=192.168.120.104) INFO 03-27 16:14:05 model_runner.py:1115] Loading model weights took 12.7522 GB
+(RayWorkerWrapper pid=31574, ip=192.168.120.114) INFO 03-27 16:13:55 __init__.py:207] Automatically detected platform cuda. [repeated 8x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)
+(RayWorkerWrapper pid=31812, ip=192.168.120.110) INFO 03-27 16:13:56 cuda.py:229] Using Flash Attention backend. [repeated 7x across cluster]
+(RayWorkerWrapper pid=31462, ip=192.168.120.109) INFO 03-27 16:13:56 utils.py:916] Found nccl from library libnccl.so.2 [repeated 7x across cluster]
+(RayWorkerWrapper pid=31462, ip=192.168.120.109) INFO 03-27 16:13:56 pynccl.py:69] vLLM is using nccl==2.21.5 [repeated 7x across cluster]
+(RayWorkerWrapper pid=31462, ip=192.168.120.109) INFO 03-27 16:13:56 model_runner.py:1110] Starting to load model /home/kaixin/llama-3-70B... [repeated 7x across cluster]
+Loading safetensors checkpoint shards:  93% Completed | 28/30 [00:09<00:00,  2.17it/s]
+Loading safetensors checkpoint shards: 100% Completed | 30/30 [00:09<00:00,  3.02it/s]
+
+INFO 03-27 16:14:06 model_runner.py:1115] Loading model weights took 14.7092 GB
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/bin/vllm", line 8, in <module>
+[rank0]:     sys.exit(main())
+[rank0]:              ^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/entrypoints/cli/main.py", line 73, in main
+[rank0]:     args.dispatch_function(args)
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/entrypoints/cli/serve.py", line 34, in cmd
+[rank0]:     uvloop.run(run_server(args))
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/uvloop/__init__.py", line 109, in run
+[rank0]:     return __asyncio.run(
+[rank0]:            ^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/asyncio/runners.py", line 195, in run
+[rank0]:     return runner.run(main)
+[rank0]:            ^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/asyncio/runners.py", line 118, in run
+[rank0]:     return self._loop.run_until_complete(task)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/uvloop/__init__.py", line 61, in wrapper
+[rank0]:     return await main
+[rank0]:            ^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/entrypoints/openai/api_server.py", line 947, in run_server
+[rank0]:     async with build_async_engine_client(args) as engine_client:
+[rank0]:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/contextlib.py", line 210, in __aenter__
+[rank0]:     return await anext(self.gen)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/entrypoints/openai/api_server.py", line 139, in build_async_engine_client
+[rank0]:     async with build_async_engine_client_from_engine_args(
+[rank0]:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/contextlib.py", line 210, in __aenter__
+[rank0]:     return await anext(self.gen)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/entrypoints/openai/api_server.py", line 163, in build_async_engine_client_from_engine_args
+[rank0]:     engine_client = AsyncLLMEngine.from_engine_args(
+[rank0]:                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/engine/async_llm_engine.py", line 644, in from_engine_args
+[rank0]:     engine = cls(
+[rank0]:              ^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/engine/async_llm_engine.py", line 594, in __init__
+[rank0]:     self.engine = self._engine_class(*args, **kwargs)
+[rank0]:                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/engine/async_llm_engine.py", line 267, in __init__
+[rank0]:     super().__init__(*args, **kwargs)
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/engine/llm_engine.py", line 273, in __init__
+[rank0]:     self.model_executor = executor_class(vllm_config=vllm_config, )
+[rank0]:                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/executor/executor_base.py", line 271, in __init__
+[rank0]:     super().__init__(*args, **kwargs)
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/executor/executor_base.py", line 52, in __init__
+[rank0]:     self._init_executor()
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/executor/ray_distributed_executor.py", line 90, in _init_executor
+[rank0]:     self._init_workers_ray(placement_group)
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/executor/ray_distributed_executor.py", line 360, in _init_workers_ray
+[rank0]:     self._run_workers("load_model",
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/executor/ray_distributed_executor.py", line 485, in _run_workers
+[rank0]:     ray_worker_outputs = ray.get(ray_worker_outputs)
+[rank0]:                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/ray/_private/auto_init_hook.py", line 21, in auto_init_wrapper
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+[rank0]:     return func(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/ray/_private/worker.py", line 2755, in get
+[rank0]:     values, debugger_breakpoint = worker.get_objects(object_refs, timeout=timeout)
+[rank0]:                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/ray/_private/worker.py", line 906, in get_objects
+[rank0]:     raise value.as_instanceof_cause()
+[rank0]: ray.exceptions.RayTaskError(OutOfMemoryError): ray::RayWorkerWrapper.execute_method() (pid=31574, ip=192.168.120.114, actor_id=378a9a2db5bee4135e5d39b603000000, repr=<vllm.executor.ray_utils.RayWorkerWrapper object at 0x7b15ac58c1a0>)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/worker/worker_base.py", line 582, in execute_method
+[rank0]:     raise e
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/worker/worker_base.py", line 573, in execute_method
+[rank0]:     return run_method(target, method, args, kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/utils.py", line 2196, in run_method
+[rank0]:     return func(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/worker/worker.py", line 183, in load_model
+[rank0]:     self.model_runner.load_model()
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/worker/model_runner.py", line 1112, in load_model
+[rank0]:     self.model = get_model(vllm_config=self.vllm_config)
+[rank0]:                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/model_loader/__init__.py", line 14, in get_model
+[rank0]:     return loader.load_model(vllm_config=vllm_config)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/model_loader/loader.py", line 406, in load_model
+[rank0]:     model = _initialize_model(vllm_config=vllm_config)
+[rank0]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/model_loader/loader.py", line 125, in _initialize_model
+[rank0]:     return model_class(vllm_config=vllm_config, prefix=prefix)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 496, in __init__
+[rank0]:     self.model = self._init_model(vllm_config=vllm_config,
+[rank0]:                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 533, in _init_model
+[rank0]:     return LlamaModel(vllm_config=vllm_config, prefix=prefix)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/compilation/decorators.py", line 151, in __init__
+[rank0]:     old_init(self, vllm_config=vllm_config, prefix=prefix, **kwargs)
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 326, in __init__
+[rank0]:     self.start_layer, self.end_layer, self.layers = make_layers(
+[rank0]:                                                     ^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/utils.py", line 558, in make_layers
+[rank0]:     maybe_offload_to_cpu(layer_fn(prefix=f"{prefix}.{idx}"))
+[rank0]:                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 328, in <lambda>
+[rank0]:     lambda prefix: layer_type(config=config,
+[rank0]:                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 254, in __init__
+[rank0]:     self.mlp = LlamaMLP(
+[rank0]:                ^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/models/llama.py", line 70, in __init__
+[rank0]:     self.gate_up_proj = MergedColumnParallelLinear(
+[rank0]:                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/layers/linear.py", line 441, in __init__
+[rank0]:     super().__init__(input_size=input_size,
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/layers/linear.py", line 314, in __init__
+[rank0]:     self.quant_method.create_weights(
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/vllm/model_executor/layers/linear.py", line 129, in create_weights
+[rank0]:     weight = Parameter(torch.empty(sum(output_partition_sizes),
+[rank0]:                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/kaixin/miniconda3/envs/vllm/lib/python3.12/site-packages/torch/utils/_device.py", line 106, in __torch_function__
+[rank0]:     return func(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank0]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 0 has a total capacity of 23.64 GiB of which 379.06 MiB is free. Including non-PyTorch memory, this process has 23.13 GiB memory in use. Of the allocated memory 22.60 GiB is allocated by PyTorch, and 19.53 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+(RayWorkerWrapper pid=27123, ip=192.168.120.113) INFO 03-27 16:14:05 model_runner.py:1115] Loading model weights took 12.7522 GB [repeated 6x across cluster]
+INFO 03-27 16:14:07 ray_distributed_executor.py:104] Shutting down Ray distributed executor. If you see error log from logging.cc regarding SIGTERM received, please ignore because this is the expected termination process in Ray.
+[rank0]:[W327 16:14:07.992475672 ProcessGroupNCCL.cpp:1250] Warning: WARNING: process group has NOT been destroyed before we destruct ProcessGroupNCCL. On normal program exit, the application should call destroy_process_group to ensure that any pending NCCL operations have finished in this process. In rare cases this process can exit before this point and block the progress of another member of the process group. This constraint has always been present,  but this warning has only been added since PyTorch 2.4 (function operator())
+

@@ -1,0 +1,28 @@
+head:
+
+sudo apt update
+sudo apt install -y nfs-kernel-server
+
+sudo mkdir -p /mnt/shared
+sudo chmod 777 /mnt/shared  
+
+编辑 /etc/exports 添加要共享的目录
+/mnt/shared 192.168.120.101/24(rw,sync,no_root_squash,no_subtree_check)
+
+sudo exportfs -ra  # 重新加载 NFS 配置
+sudo systemctl restart nfs-kernel-server
+
+
+point:
+
+sudo apt update
+sudo apt install -y nfs-common
+
+sudo mkdir -p /mnt/shared
+
+sudo mount -t nfs 192.168.120.101:/mnt/shared /mnt/shared
+
+开机自动挂载，未验证
+192.168.120.101:/mnt/shared  /mnt/shared  nfs  defaults  0  0
+
+
